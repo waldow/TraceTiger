@@ -118,6 +118,10 @@ public partial class QueryTabViewModel : ObservableObject
         _owner.ScheduleSessionSave();
     }
 
+    partial void OnCustomFromTextChanged(string value) => _owner.ScheduleSessionSave();
+
+    partial void OnCustomToTextChanged(string value) => _owner.ScheduleSessionSave();
+
     partial void OnChartChanged(ChartModel? value) => OnPropertyChanged(nameof(ChartOk));
 
     partial void OnResultViewChanged(ResultViewKind value)
@@ -421,6 +425,8 @@ public partial class QueryTabViewModel : ObservableObject
         Title = Title,
         ConnectionName = SelectedConnection?.Name ?? "",
         TimeRange = SelectedTimeRange.Kind,
+        CustomFromText = CustomFromText,
+        CustomToText = CustomToText,
         IsDirty = IsDirty,
     };
 

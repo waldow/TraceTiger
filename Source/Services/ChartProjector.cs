@@ -78,30 +78,39 @@ public static class ChartProjector
         if (catCols.Count >= 1)
         {
             // One series per category tuple and numeric value column.
-            var groups = new Dictionary<string, double?[]>();
+            var groups = new Dictionary<(string CategoryKey, int ValueColumn), SeriesBucket>();
 
             foreach (var r in table.Rows)
             {
                 var d = AsDateTime(r, dateCol);
                 if (d is null || !keyIndex.TryGetValue(d.Value, out var xi)) continue;
 
-                var cat = CategoryLabel(r, catCols);
+                var categoryKey = CategoryKey(r, catCols);
+                var categoryLabel = CategoryLabel(r, catCols);
                 foreach (var valueCol in numericCols)
                 {
                     var name = numericCols.Count == 1
-                        ? cat
-                        : $"{cat} · {table.Columns[valueCol].Name}";
-                    if (!groups.TryGetValue(name, out var arr))
+                        ? categoryLabel
+                        : $"{categoryLabel} · {table.Columns[valueCol].Name}";
+                    var key = (categoryKey, numericCols.Count == 1 ? -1 : valueCol);
+                    if (!groups.TryGetValue(key, out var bucket))
                     {
-                        arr = new double?[keys.Count];
-                        groups[name] = arr;
+                        bucket = new SeriesBucket
+                        {
+                            DisplayName = name,
+                            SortKey = numericCols.Count == 1
+                                ? categoryKey
+                                : $"{categoryKey}\u001F{table.Columns[valueCol].Name}",
+                            Values = new double?[keys.Count],
+                        };
+                        groups[key] = bucket;
                     }
-                    arr[xi] = AsDouble(r, valueCol);
+                    bucket.Values[xi] = AsDouble(r, valueCol);
                 }
             }
 
-            foreach (var (name, values) in groups.OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
-                series.Add(MakeSeries(kind, name, values, series.Count));
+            foreach (var bucket in groups.Values.OrderBy(g => g.SortKey, StringComparer.OrdinalIgnoreCase))
+                series.Add(MakeSeries(kind, bucket.DisplayName, bucket.Values, series.Count));
         }
         else
         {
@@ -249,6 +258,9 @@ public static class ChartProjector
     private static string CellText(object?[] row, int i) =>
         i < row.Length ? row[i]?.ToString() ?? "" : "";
 
+    private static string CategoryKey(object?[] row, IReadOnlyList<int> catCols) =>
+        string.Join('\u001F', catCols.Select(i => CellText(row, i)));
+
     private static string CategoryLabel(object?[] row, IReadOnlyList<int> catCols)
     {
         // Long values (dynamic/JSON columns) make unreadable series names — clip them.
@@ -258,5 +270,12 @@ public static class ChartProjector
             .Select(s => s.Length <= 32 ? s : s[..29] + "…");
         var label = string.Join(" · ", parts);
         return string.IsNullOrWhiteSpace(label) ? "(blank)" : label;
+    }
+
+    private sealed class SeriesBucket
+    {
+        public required string DisplayName { get; init; }
+        public required string SortKey { get; init; }
+        public required double?[] Values { get; init; }
     }
 }

@@ -445,6 +445,8 @@ public partial class MainViewModel : ObservableObject
                 tab.SelectedConnection = Connections.FirstOrDefault(c => c.Name == entry.ConnectionName)
                     ?? tab.SelectedConnection;
                 tab.SelectedTimeRange = TimeRangeCatalog.OptionFor(entry.TimeRange);
+                tab.CustomFromText = entry.CustomFromText;
+                tab.CustomToText = entry.CustomToText;
                 Tabs.Add(tab);
             }
 

@@ -12,6 +12,8 @@ public sealed class TabSessionEntry
     public string? Title { get; set; }
     public string ConnectionName { get; set; } = "";
     public TimeRangeKind TimeRange { get; set; } = TimeRangeKind.QueryDefined;
+    public string CustomFromText { get; set; } = "";
+    public string CustomToText { get; set; } = "";
     public bool IsDirty { get; set; }
 }
 

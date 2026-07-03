@@ -103,7 +103,7 @@ public sealed class ScriptLibraryService : IDisposable
 
     public string CreateScript(string folder, string name)
     {
-        var fileName = name.EndsWith(".kql", StringComparison.OrdinalIgnoreCase) ? name : name + ".kql";
+        var fileName = ScriptFileNameFrom(name);
         var path = Path.Combine(folder, fileName);
         if (File.Exists(path)) throw new InvalidOperationException($"\"{fileName}\" already exists here.");
         lock (_gate) _selfWrites.Add(path);
@@ -114,14 +114,15 @@ public sealed class ScriptLibraryService : IDisposable
 
     public string CreateFolder(string parent, string name)
     {
-        var path = Path.Combine(parent, name);
+        var folderName = ChildNameFrom(name, "folder name");
+        var path = Path.Combine(parent, folderName);
         Directory.CreateDirectory(path);
         return path;
     }
 
     public string RenameScript(string path, string newName)
     {
-        var fileName = newName.EndsWith(".kql", StringComparison.OrdinalIgnoreCase) ? newName : newName + ".kql";
+        var fileName = ScriptFileNameFrom(newName);
         var newPath = Path.Combine(Path.GetDirectoryName(path)!, fileName);
         if (File.Exists(newPath)) throw new InvalidOperationException($"\"{fileName}\" already exists here.");
         lock (_gate)
@@ -137,6 +138,40 @@ public sealed class ScriptLibraryService : IDisposable
     {
         lock (_gate) _selfWrites.Add(path);
         File.Delete(path);
+    }
+
+    private static string ScriptFileNameFrom(string name)
+    {
+        var trimmed = ChildNameFrom(name, "script name");
+        var fileName = trimmed.EndsWith(".kql", StringComparison.OrdinalIgnoreCase)
+            ? trimmed
+            : trimmed + ".kql";
+
+        if (string.IsNullOrWhiteSpace(Path.GetFileNameWithoutExtension(fileName)))
+            throw new InvalidOperationException("Enter a script name.");
+
+        return ChildNameFrom(fileName, "script name");
+    }
+
+    private static string ChildNameFrom(string name, string label)
+    {
+        var trimmed = name.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+            throw new InvalidOperationException($"Enter a {label}.");
+
+        if (trimmed is "." or ".."
+            || trimmed.EndsWith(".", StringComparison.Ordinal)
+            || Path.IsPathFullyQualified(trimmed)
+            || trimmed.IndexOf(Path.DirectorySeparatorChar) >= 0
+            || trimmed.IndexOf(Path.AltDirectorySeparatorChar) >= 0
+            || trimmed.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
+            || !string.Equals(Path.GetFileName(trimmed), trimmed, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"\"{trimmed}\" is not a valid {label}. Use a name only, not a path.");
+        }
+
+        return trimmed;
     }
 
     private void OnFsEvent(object sender, FileSystemEventArgs e)
