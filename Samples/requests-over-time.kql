@@ -1,0 +1,7 @@
+// @name Requests over time
+// @description Request volume and average duration in 15-minute bins, split by result code.
+requests
+| where timestamp > ago(6h)
+| summarize count(), avgDuration = avg(duration) by resultCode, bin(timestamp, 15m)
+| order by timestamp asc
+| render timechart

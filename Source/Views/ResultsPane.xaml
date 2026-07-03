@@ -1,0 +1,195 @@
+<UserControl x:Class="TraceTiger.Views.ResultsPane"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:TraceTiger.ViewModels"
+             xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:QueryTabViewModel}">
+
+    <Grid Background="{DynamicResource BgDeep}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- ============ results toolbar ============ -->
+        <Border Grid.Row="0" Background="{DynamicResource BgSurface}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                Padding="10,5">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <RadioButton Style="{StaticResource ModeTogglePill}" Content="Grid"
+                                 IsChecked="{Binding ResultView, Converter={StaticResource EnumMatchToBool}, ConverterParameter=Grid}"/>
+                    <RadioButton Style="{StaticResource ModeTogglePill}" Content="Chart" Margin="4,0,0,0"
+                                 IsChecked="{Binding ResultView, Converter={StaticResource EnumMatchToBool}, ConverterParameter=Chart}"/>
+                    <RadioButton Style="{StaticResource ModeTogglePill}" Content="JSON" Margin="4,0,0,0"
+                                 IsChecked="{Binding ResultView, Converter={StaticResource EnumMatchToBool}, ConverterParameter=Json}"/>
+                </StackPanel>
+
+                <!-- chart kind sub-toggle -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="14,0,0,0"
+                            Visibility="{Binding ResultView, Converter={StaticResource EnumMatchToVisibility}, ConverterParameter=Chart}">
+                    <RadioButton Style="{StaticResource ModeTogglePill}" Content="Line" FontSize="10"
+                                 IsChecked="{Binding ChartKind, Converter={StaticResource EnumMatchToBool}, ConverterParameter=Line}"/>
+                    <RadioButton Style="{StaticResource ModeTogglePill}" Content="Column" FontSize="10" Margin="4,0,0,0"
+                                 IsChecked="{Binding ChartKind, Converter={StaticResource EnumMatchToBool}, ConverterParameter=Column}"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal">
+                    <Button Content="Export CSV" Style="{StaticResource GhostButton}" FontSize="11"
+                            Command="{Binding ExportCsvCommand}"/>
+                    <Button Content="Copy TSV" Style="{StaticResource GhostButton}" FontSize="11" Margin="4,0,0,0"
+                            Command="{Binding CopyTsvCommand}" ToolTip="Copies rows for pasting into Excel"/>
+                    <Button Content="Copy KQL" Style="{StaticResource GhostButton}" FontSize="11" Margin="4,0,0,0"
+                            Command="{Binding CopyKqlCommand}" ToolTip="Copies the resolved KQL (placeholders filled in)"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ============ content ============ -->
+        <Grid Grid.Row="1">
+            <!-- grid -->
+            <DataGrid x:Name="ResultsGrid"
+                      ItemsSource="{Binding ResultsView}"
+                      AutoGenerateColumns="True"
+                      IsReadOnly="True"
+                      EnableRowVirtualization="True"
+                      EnableColumnVirtualization="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="None"
+                      SelectionUnit="Cell"
+                      AutoGeneratingColumn="ResultsGrid_AutoGeneratingColumn"
+                      MouseDoubleClick="ResultsGrid_MouseDoubleClick">
+                <DataGrid.Visibility>
+                    <Binding Path="ResultView" Converter="{StaticResource EnumMatchToVisibility}" ConverterParameter="Grid"/>
+                </DataGrid.Visibility>
+            </DataGrid>
+
+            <!-- chart -->
+            <Grid Visibility="{Binding ResultView, Converter={StaticResource EnumMatchToVisibility}, ConverterParameter=Chart}">
+                <lvc:CartesianChart Series="{Binding Chart.Series}"
+                                    XAxes="{Binding Chart.XAxes}"
+                                    YAxes="{Binding Chart.YAxes}"
+                                    DrawMarginFrame="{Binding Chart.DrawMarginFrame}"
+                                    FindingStrategy="{Binding Chart.FindingStrategy}"
+                                    TooltipPosition="{Binding Chart.TooltipPosition}"
+                                    TooltipTextPaint="{Binding Chart.TooltipTextPaint}"
+                                    TooltipBackgroundPaint="{Binding Chart.TooltipBackgroundPaint}"
+                                    TooltipTextSize="{Binding Chart.TooltipTextSize}"
+                                    Background="{DynamicResource BgDeep}"
+                                    Margin="8"
+                                    Visibility="{Binding ChartOk, Converter={StaticResource BoolToVisibility}}"/>
+                <TextBlock Text="This result shape isn't chartable — it needs a datetime or category column plus a numeric column."
+                           FontSize="12" Foreground="{DynamicResource TextMuted}" TextWrapping="Wrap"
+                           MaxWidth="420" TextAlignment="Center"
+                           VerticalAlignment="Center" HorizontalAlignment="Center"
+                           Visibility="{Binding ChartOk, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}"/>
+            </Grid>
+
+            <!-- json -->
+            <Grid Visibility="{Binding ResultView, Converter={StaticResource EnumMatchToVisibility}, ConverterParameter=Json}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Background="{DynamicResource BgPanel}" Padding="10,4"
+                        Visibility="{Binding JsonTruncated, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="Showing the first 1,000 rows — export CSV for the full set."
+                               FontSize="11" Foreground="{DynamicResource AccentYellow}"/>
+                </Border>
+                <avalonedit:TextEditor Grid.Row="1"
+                                       x:Name="JsonEditor"
+                                       FontFamily="{DynamicResource CodeFont}"
+                                       FontSize="{Binding EditorFontSize}"
+                                       Background="{DynamicResource BgDeep}"
+                                       Foreground="{DynamicResource TextPrimary}"
+                                       LineNumbersForeground="{DynamicResource TextMuted}"
+                                       ShowLineNumbers="True"
+                                       IsReadOnly="True"
+                                       HorizontalScrollBarVisibility="Auto"
+                                       VerticalScrollBarVisibility="Auto"
+                                       Padding="8,6"/>
+            </Grid>
+
+            <!-- empty state (drawn last so it sits above the empty grid) -->
+            <Border Background="{DynamicResource BgDeep}"
+                    Visibility="{Binding HasResult, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                    <TextBlock Text="🐯" FontSize="28" HorizontalAlignment="Center" Opacity="0.5"/>
+                    <TextBlock Text="Run a query to see results (F5 or Ctrl+Enter)" FontSize="12"
+                               Foreground="{DynamicResource TextMuted}" Margin="0,8,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ============ cell inspector ============ -->
+        <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+                Background="{DynamicResource BgSurface}" MaxHeight="260"
+                Visibility="{Binding IsInspectorOpen, Converter={StaticResource BoolToVisibility}}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid Grid.Row="0" Margin="10,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" FontSize="11" Foreground="{DynamicResource TextSecondary}"
+                               VerticalAlignment="Center">
+                        <Run Text="CELL " FontWeight="Bold"/>
+                        <Run Text="{Binding InspectorTitle}" FontFamily="{DynamicResource CodeFont}"
+                             Foreground="{DynamicResource AccentBlue}"/>
+                    </TextBlock>
+                    <Button Grid.Column="1" Content="Copy" Style="{StaticResource GhostButton}" FontSize="11"
+                            Command="{Binding CopyInspectorCommand}"/>
+                    <Button Grid.Column="2" Content="✕" Style="{StaticResource GhostButton}" FontSize="11"
+                            Margin="4,0,0,0" Command="{Binding CloseInspectorCommand}" ToolTip="Close (Esc)"/>
+                </Grid>
+                <avalonedit:TextEditor Grid.Row="1"
+                                       x:Name="InspectorEditor"
+                                       FontFamily="{DynamicResource CodeFont}"
+                                       FontSize="12"
+                                       Background="{DynamicResource BgInput}"
+                                       Foreground="{DynamicResource TextPrimary}"
+                                       IsReadOnly="True"
+                                       WordWrap="True"
+                                       HorizontalScrollBarVisibility="Auto"
+                                       VerticalScrollBarVisibility="Auto"
+                                       Padding="8,4"/>
+            </Grid>
+        </Border>
+
+        <!-- ============ status bar ============ -->
+        <Border Grid.Row="3" Background="{DynamicResource BgSurface}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+                Padding="10,4">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding StatusText}" FontSize="11"
+                           Foreground="{DynamicResource TextSecondary}"
+                           Visibility="{Binding StatusText, Converter={StaticResource NullToVisibility}}"/>
+                <TextBlock Text="{Binding WarningText}" FontSize="11" Margin="12,0,0,0"
+                           Foreground="{DynamicResource AccentYellow}"
+                           Visibility="{Binding WarningText, Converter={StaticResource NullToVisibility}}"/>
+                <TextBlock Text="{Binding ErrorText}" FontSize="11"
+                           Foreground="{DynamicResource AccentRed}" TextWrapping="Wrap"
+                           Visibility="{Binding ErrorText, Converter={StaticResource NullToVisibility}}"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

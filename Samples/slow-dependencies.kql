@@ -1,0 +1,11 @@
+// @name Slow dependencies for a service
+// @description Dependencies slower than the threshold for one cloud role.
+// @param SERVICE-NAME checkout-api
+// @param THRESHOLD-MS 1000
+dependencies
+| where timestamp > ago(6h)
+| where cloud_RoleName == "<SERVICE-NAME>"
+| where duration > <THRESHOLD-MS>
+| project timestamp, name, target, duration, resultCode, operation_Id
+| order by duration desc
+| take 100

@@ -1,0 +1,7 @@
+// @name Exceptions by type
+// @description Top exception types in the selected window.
+exceptions
+| where timestamp > ago(24h)
+| summarize count() by type
+| top 20 by count_
+| render columnchart

@@ -1,0 +1,8 @@
+// @name User journey by operation id
+// @description Everything (requests, traces, dependencies, exceptions) for one operation, in time order.
+// @param OPERATION-ID
+union requests, traces, dependencies, exceptions
+| where timestamp > ago(7d)
+| where operation_Id == "<OPERATION-ID>"
+| project timestamp, itemType, name = coalesce(name, message), duration, resultCode, customDimensions
+| order by timestamp asc

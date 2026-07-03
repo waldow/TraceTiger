@@ -1,0 +1,141 @@
+<UserControl x:Class="TraceTiger.Views.QueryTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="clr-namespace:TraceTiger.ViewModels"
+             xmlns:models="clr-namespace:TraceTiger.Models"
+             xmlns:views="clr-namespace:TraceTiger.Views"
+             xmlns:avalonedit="http://icsharpcode.net/sharpdevelop/avalonedit"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:QueryTabViewModel}">
+
+    <Grid Background="{DynamicResource BgDeep}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="2*" MinHeight="110"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="3"/>
+            <RowDefinition Height="3*" MinHeight="140"/>
+        </Grid.RowDefinitions>
+
+        <!-- ============ toolbar ============ -->
+        <Border Grid.Row="0" Background="{DynamicResource BgSurface}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1"
+                Padding="10,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- connection picker -->
+                <ComboBox Grid.Column="0" Width="190"
+                          ItemsSource="{Binding Connections}"
+                          SelectedItem="{Binding SelectedConnection}"
+                          ToolTip="Connection to run against">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:Connection}">
+                            <StackPanel Orientation="Horizontal">
+                                <Ellipse Width="9" Height="9" Margin="0,0,7,0" VerticalAlignment="Center"
+                                         Fill="{Binding ColorHex, Converter={StaticResource HexToBrush}}"/>
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <!-- time range -->
+                <ComboBox Grid.Column="1" Width="140" Margin="8,0,0,0"
+                          ItemsSource="{Binding TimeRangeOptions}"
+                          SelectedItem="{Binding SelectedTimeRange}"
+                          ToolTip="Server-side time range (intersected with the query's own filters)"/>
+
+                <!-- custom from/to -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0"
+                            Visibility="{Binding IsCustomRange, Converter={StaticResource BoolToVisibility}}">
+                    <TextBox Width="130" Text="{Binding CustomFromText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="From (local), e.g. 2026-07-01 09:00" FontSize="11"/>
+                    <TextBlock Text="→" Margin="6,0" VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextMuted}"/>
+                    <TextBox Width="130" Text="{Binding CustomToText, UpdateSourceTrigger=PropertyChanged}"
+                             ToolTip="To (local), e.g. 2026-07-01 17:00" FontSize="11"/>
+                </StackPanel>
+
+                <!-- save + run -->
+                <Button Grid.Column="4" Content="Save" Style="{StaticResource GhostButton}"
+                        Command="{Binding SaveCommand}" Margin="0,0,8,0"
+                        ToolTip="Save script (Ctrl+S)"/>
+                <Button Grid.Column="5" Width="110"
+                        Command="{Binding RunOrCancelCommand}"
+                        ToolTip="Run (F5 / Ctrl+Enter)">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource PrimaryButton}">
+                            <Setter Property="Content" Value="▶  Run"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                    <Setter Property="Content" Value="■  Cancel"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ============ KQL editor ============ -->
+        <avalonedit:TextEditor Grid.Row="1"
+                               x:Name="KqlEditor"
+                               FontFamily="{DynamicResource CodeFont}"
+                               FontSize="{Binding EditorFontSize}"
+                               Background="{DynamicResource BgDeep}"
+                               Foreground="{DynamicResource TextPrimary}"
+                               LineNumbersForeground="{DynamicResource TextMuted}"
+                               ShowLineNumbers="True"
+                               WordWrap="{Binding EditorWordWrap}"
+                               HorizontalScrollBarVisibility="Auto"
+                               VerticalScrollBarVisibility="Auto"
+                               Padding="8,6"/>
+
+        <!-- ============ parameter strip ============ -->
+        <Border Grid.Row="2" Background="{DynamicResource BgSurface}"
+                BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0"
+                Padding="10,6"
+                Visibility="{Binding HasParameters, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="PARAMS" FontSize="10" FontWeight="Bold"
+                           Foreground="{DynamicResource TextMuted}" VerticalAlignment="Center"
+                           Margin="0,0,10,0"/>
+                <ItemsControl ItemsSource="{Binding Parameters}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:ParameterEntryViewModel}">
+                            <StackPanel Orientation="Horizontal" Margin="0,2,14,2">
+                                <TextBlock Text="{Binding Token}" FontSize="11"
+                                           FontFamily="{DynamicResource CodeFont}"
+                                           Foreground="{DynamicResource AccentYellow}"
+                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBox Width="160" FontSize="11"
+                                         Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <GridSplitter Grid.Row="3" Height="3" HorizontalAlignment="Stretch"
+                      Background="{DynamicResource BorderBrush}"/>
+
+        <!-- ============ results ============ -->
+        <views:ResultsPane Grid.Row="4"/>
+    </Grid>
+</UserControl>

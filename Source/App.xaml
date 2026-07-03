@@ -1,0 +1,22 @@
+<Application x:Class="TraceTiger.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:converters="clr-namespace:TraceTiger.Converters"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/DarkTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <converters:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
+            <converters:NullToVisibilityConverter x:Key="NullToVisibility"/>
+            <converters:EnumMatchToBoolConverter x:Key="EnumMatchToBool"/>
+            <converters:EnumMatchToVisibilityConverter x:Key="EnumMatchToVisibility"/>
+            <converters:InverseBoolConverter x:Key="InverseBool"/>
+            <converters:HexToBrushConverter x:Key="HexToBrush"/>
+            <converters:RelativeTimeConverter x:Key="RelativeTime"/>
+            <converters:ZeroToVisibilityConverter x:Key="ZeroToVisibility"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

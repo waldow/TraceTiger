@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- KQL (Kusto Query Language) syntax highlighting for AvalonEdit, GitHub-dark palette
+     matching DarkTheme.xaml. Registered at startup by App.RegisterKqlHighlighting(). -->
+<SyntaxDefinition name="KQL" extensions=".kql" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+
+  <Color name="Comment"     foreground="#8B949E" fontStyle="italic" />
+  <Color name="String"      foreground="#A5D6FF" />
+  <Color name="Number"      foreground="#79C0FF" />
+  <Color name="Keyword"     foreground="#FF7B72" />
+  <Color name="Function"    foreground="#D2A8FF" />
+  <Color name="Table"       foreground="#7EE787" />
+  <Color name="Placeholder" foreground="#D29922" fontWeight="bold" />
+
+  <RuleSet ignoreCase="true">
+
+    <Span color="Comment" begin="//" />
+
+    <Span color="String">
+      <Begin>"</Begin>
+      <End>"</End>
+      <RuleSet>
+        <Span begin="\\" end="." />
+      </RuleSet>
+    </Span>
+
+    <Span color="String">
+      <Begin>'</Begin>
+      <End>'</End>
+      <RuleSet>
+        <Span begin="\\" end="." />
+      </RuleSet>
+    </Span>
+
+    <!-- <TOKEN> placeholders that the parameter strip fills in before a run -->
+    <Rule color="Placeholder">&lt;[A-Za-z][A-Za-z0-9_\-]*&gt;</Rule>
+
+    <!-- tabular operators / statements / render types -->
+    <Keywords color="Keyword">
+      <Word>let</Word><Word>where</Word><Word>summarize</Word><Word>extend</Word>
+      <Word>project</Word><Word>project-away</Word><Word>project-rename</Word>
+      <Word>project-keep</Word><Word>project-reorder</Word>
+      <Word>join</Word><Word>union</Word><Word>order</Word><Word>sort</Word><Word>by</Word>
+      <Word>top</Word><Word>take</Word><Word>limit</Word><Word>distinct</Word>
+      <Word>render</Word><Word>evaluate</Word><Word>parse</Word><Word>parse-where</Word>
+      <Word>mv-expand</Word><Word>mv-apply</Word><Word>on</Word><Word>kind</Word>
+      <Word>inner</Word><Word>leftouter</Word><Word>rightouter</Word><Word>fullouter</Word>
+      <Word>leftanti</Word><Word>rightanti</Word><Word>leftsemi</Word><Word>rightsemi</Word>
+      <Word>asc</Word><Word>desc</Word><Word>nulls</Word>
+      <Word>and</Word><Word>or</Word><Word>not</Word><Word>in</Word><Word>has</Word>
+      <Word>has_any</Word><Word>has_all</Word><Word>has_cs</Word>
+      <Word>contains</Word><Word>contains_cs</Word><Word>startswith</Word><Word>endswith</Word>
+      <Word>matches</Word><Word>regex</Word><Word>between</Word><Word>as</Word>
+      <Word>count</Word><Word>datatable</Word><Word>externaldata</Word><Word>facet</Word>
+      <Word>find</Word><Word>fork</Word><Word>getschema</Word><Word>invoke</Word>
+      <Word>lookup</Word><Word>make-series</Word><Word>print</Word><Word>range</Word>
+      <Word>sample</Word><Word>scan</Word><Word>search</Word><Word>serialize</Word>
+      <Word>top-nested</Word><Word>with</Word><Word>step</Word><Word>from</Word><Word>to</Word>
+      <Word>timechart</Word><Word>barchart</Word><Word>columnchart</Word><Word>piechart</Word>
+      <Word>areachart</Word><Word>linechart</Word><Word>scatterchart</Word><Word>anomalychart</Word>
+      <Word>table</Word><Word>true</Word><Word>false</Word><Word>null</Word>
+    </Keywords>
+
+    <!-- common scalar / aggregation functions -->
+    <Keywords color="Function">
+      <Word>ago</Word><Word>bin</Word><Word>bin_at</Word><Word>floor</Word><Word>ceiling</Word>
+      <Word>round</Word><Word>abs</Word><Word>exp</Word><Word>log</Word><Word>log10</Word>
+      <Word>pow</Word><Word>sqrt</Word><Word>sign</Word><Word>rand</Word>
+      <Word>countif</Word><Word>dcount</Word><Word>dcountif</Word>
+      <Word>sum</Word><Word>sumif</Word><Word>avg</Word><Word>avgif</Word>
+      <Word>min</Word><Word>minif</Word><Word>max</Word><Word>maxif</Word>
+      <Word>percentile</Word><Word>percentiles</Word><Word>stdev</Word><Word>variance</Word>
+      <Word>arg_max</Word><Word>arg_min</Word><Word>any</Word><Word>take_any</Word>
+      <Word>make_list</Word><Word>make_set</Word><Word>make_bag</Word>
+      <Word>strcat</Word><Word>strcat_delim</Word><Word>strcat_array</Word><Word>strlen</Word>
+      <Word>substring</Word><Word>split</Word><Word>trim</Word><Word>trim_start</Word><Word>trim_end</Word>
+      <Word>toupper</Word><Word>tolower</Word><Word>replace_string</Word><Word>replace_regex</Word>
+      <Word>extract</Word><Word>extract_all</Word><Word>indexof</Word><Word>countof</Word>
+      <Word>parse_json</Word><Word>parse_url</Word><Word>parse_xml</Word><Word>parse_csv</Word>
+      <Word>todynamic</Word><Word>tostring</Word><Word>toint</Word><Word>tolong</Word>
+      <Word>todouble</Word><Word>todecimal</Word><Word>tobool</Word><Word>todatetime</Word>
+      <Word>totimespan</Word><Word>toguid</Word><Word>gettype</Word>
+      <Word>isempty</Word><Word>isnotempty</Word><Word>isnull</Word><Word>isnotnull</Word>
+      <Word>isnan</Word><Word>iff</Word><Word>iif</Word><Word>case</Word><Word>coalesce</Word>
+      <Word>now</Word><Word>datetime</Word><Word>timespan</Word>
+      <Word>datetime_add</Word><Word>datetime_diff</Word><Word>datetime_part</Word>
+      <Word>dayofweek</Word><Word>dayofmonth</Word><Word>dayofyear</Word>
+      <Word>startofday</Word><Word>endofday</Word><Word>startofweek</Word><Word>endofweek</Word>
+      <Word>startofmonth</Word><Word>endofmonth</Word><Word>startofyear</Word><Word>endofyear</Word>
+      <Word>format_datetime</Word><Word>format_timespan</Word><Word>format_number</Word>
+      <Word>getmonth</Word><Word>getyear</Word><Word>hourofday</Word>
+      <Word>materialize</Word><Word>toscalar</Word><Word>row_number</Word>
+      <Word>prev</Word><Word>next</Word><Word>column_ifexists</Word>
+      <Word>pack</Word><Word>pack_all</Word><Word>pack_array</Word><Word>bag_keys</Word>
+      <Word>array_length</Word><Word>array_concat</Word><Word>array_index_of</Word>
+      <Word>set_has_element</Word><Word>hash</Word>
+      <Word>base64_encode_tostring</Word><Word>base64_decode_tostring</Word>
+      <Word>url_encode</Word><Word>url_decode</Word>
+      <Word>series_stats</Word><Word>series_fir</Word><Word>series_decompose_anomalies</Word>
+    </Keywords>
+
+    <!-- well-known App Insights (classic) and Log Analytics (workspace) tables -->
+    <Keywords color="Table">
+      <Word>requests</Word><Word>dependencies</Word><Word>exceptions</Word><Word>traces</Word>
+      <Word>customEvents</Word><Word>customMetrics</Word><Word>pageViews</Word>
+      <Word>availabilityResults</Word><Word>performanceCounters</Word><Word>browserTimings</Word>
+      <Word>AppRequests</Word><Word>AppDependencies</Word><Word>AppExceptions</Word>
+      <Word>AppTraces</Word><Word>AppEvents</Word><Word>AppMetrics</Word><Word>AppPageViews</Word>
+      <Word>AppAvailabilityResults</Word><Word>AppPerformanceCounters</Word><Word>AppBrowserTimings</Word>
+      <Word>Heartbeat</Word><Word>Usage</Word><Word>Perf</Word><Word>Event</Word><Word>Syslog</Word>
+      <Word>AzureDiagnostics</Word><Word>AzureActivity</Word><Word>AzureMetrics</Word>
+      <Word>SigninLogs</Word><Word>AuditLogs</Word><Word>SecurityEvent</Word>
+      <Word>ContainerLog</Word><Word>ContainerLogV2</Word><Word>KubePodInventory</Word>
+      <Word>StorageBlobLogs</Word><Word>FunctionAppLogs</Word>
+      <Word>AppServiceHTTPLogs</Word><Word>AppServiceConsoleLogs</Word><Word>W3CIISLog</Word>
+    </Keywords>
+
+    <!-- numbers and timespan literals: 42, 1.5, 30d, 6h, 15m, 90s, 250ms -->
+    <Rule color="Number">\b\d+(\.\d+)?(ms|microsecond|tick|[dhms])?\b</Rule>
+
+  </RuleSet>
+</SyntaxDefinition>
