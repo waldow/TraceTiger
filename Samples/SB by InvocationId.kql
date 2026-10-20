@@ -1,0 +1,18 @@
+// @name SB by InvocationId
+// @description
+let invId = "38d9b189-9b9f-423e-9e42-f4b2862f8f0e";
+let lookback = 24h;
+let requestIds =
+    traces
+    | where timestamp > ago(lookback)
+    | where tostring(customDimensions["InvocationId"]) == invId
+    | summarize by tostring(operation_ParentId);
+union requests, traces, dependencies, exceptions
+| where timestamp > ago(lookback)
+| extend InvocationId = tostring(customDimensions["InvocationId"])
+| extend SpanId = tostring(column_ifexists("id", ""))
+| where InvocationId == invId
+    or SpanId in (requestIds)
+    or tostring(operation_ParentId) in (requestIds)
+| project timestamp, itemType, name, message, operation_Id, operation_ParentId, SpanId, cloud_RoleName, cloud_RoleInstance, customDimensions
+| order by timestamp asc

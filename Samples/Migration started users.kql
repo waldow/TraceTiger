@@ -1,0 +1,9 @@
+// @name Migration started users
+// @description
+traces
+| where timestamp between (datetime(2026-06-20T14:00:00.0000000Z) .. datetime(2026-07-01T13:59:00.0000000Z))
+| where message startswith "Migration completed for user"
+| extend appUserId = tostring(customDimensions["AppUserId"])
+| where isnotempty(appUserId)
+| summarize completed = min(timestamp), startEvents = count() by appUserId
+| order by completed asc

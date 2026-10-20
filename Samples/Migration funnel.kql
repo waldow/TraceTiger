@@ -1,0 +1,14 @@
+// @name Migration funnel
+// @description
+// OLD/BAAS. Distinct users at each lifecycle stage (last 30d). Matches TyroMigrationLogic log lines.
+let win = 30d;
+traces
+| where timestamp between (datetime(2026-06-20T14:00:00.0000000Z) .. datetime(2026-07-01T13:59:00.0000000Z))
+| extend appUser = tostring(customDimensions.AppUserId)
+| summarize
+    started      = dcountif(appUser, message startswith "Beginning migration for user"),
+    dataMigrated = dcountif(appUser, message startswith "HandleMigrationStatusUpdate: Migration completed for user"),
+    completed    = dcountif(appUser, message startswith "Migration completed for user"),
+    failedFinal  = dcountif(appUser, message startswith "Migration failed for user"),
+    retried      = dcountif(appUser, message startswith "Retrying migration for user")
+| extend stuck_no_outcome = started - completed - failedFinal
