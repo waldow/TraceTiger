@@ -22,6 +22,7 @@ public partial class MainViewModel : ObservableObject
     private Dictionary<string, string> _paramValues;
     private System.Timers.Timer? _sessionSaveDebounce;
     private bool _restoringSession;
+    private bool _applyingSettings;
 
     public MainViewModel(PersistenceService persistence, ScriptLibraryService library, HistoryService history)
     {
@@ -54,7 +55,7 @@ public partial class MainViewModel : ObservableObject
 
     public void NoteConnectionUsed(Connection connection)
     {
-        if (_settings.LastConnectionName == connection.Name) return;
+        if (_applyingSettings || _settings.LastConnectionName == connection.Name) return;
         _settings.LastConnectionName = connection.Name;
         _persistence.SaveSettings(_settings);
     }
@@ -363,23 +364,36 @@ public partial class MainViewModel : ObservableObject
         var folderChanged = !string.Equals(_settings.ScriptsFolder, updated.ScriptsFolder,
             StringComparison.OrdinalIgnoreCase);
 
+        // Remember each tab's connection by name BEFORE touching the collection: Clear() makes the
+        // visible tab's ComboBox push null into its SelectedConnection through the two-way binding.
+        var connectionNames = Tabs.ToDictionary(t => t, t => t.SelectedConnection?.Name);
+
         _settings = updated;
         _persistence.SaveSettings(_settings);
 
-        Connections.Clear();
-        foreach (var c in _settings.Connections)
-            Connections.Add(c);
-
-        foreach (var tab in Tabs)
+        // Re-pointing tabs at the rebuilt Connection objects is not the user picking a connection,
+        // so it must not rewrite LastConnectionName.
+        _applyingSettings = true;
+        try
         {
-            tab.EditorFontSize = _settings.EditorFontSize;
-            tab.EditorWordWrap = _settings.EditorWordWrap;
-            if (tab.SelectedConnection is not null
-                && !Connections.Contains(tab.SelectedConnection))
+            Connections.Clear();
+            foreach (var c in _settings.Connections)
+                Connections.Add(c);
+
+            foreach (var tab in Tabs)
             {
-                tab.SelectedConnection = Connections.FirstOrDefault(c =>
-                    c.Name == tab.SelectedConnection.Name) ?? Connections.FirstOrDefault();
+                tab.EditorFontSize = _settings.EditorFontSize;
+                tab.EditorWordWrap = _settings.EditorWordWrap;
+
+                var name = connectionNames[tab];
+                tab.SelectedConnection =
+                    (name is null ? null : Connections.FirstOrDefault(c => c.Name == name))
+                    ?? DefaultConnection();
             }
+        }
+        finally
+        {
+            _applyingSettings = false;
         }
 
         if (folderChanged)

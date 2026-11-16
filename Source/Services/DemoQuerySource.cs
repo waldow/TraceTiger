@@ -1,3 +1,4 @@
+using System.Globalization;
 using TraceTiger.Models;
 
 namespace TraceTiger.Services;
@@ -38,7 +39,9 @@ public sealed class DemoQuerySource
             {
                 var count = 40 + rng.Next(0, 60) + (service == "checkout-api" ? bin * 2 : 0);
                 var avg = Math.Round(80 + rng.NextDouble() * 240, 1);
-                var detail = $$"""{"service":"{{service}}","region":"westeurope","p95":{{Math.Round(avg * 1.8, 1)}},"errors":{{rng.Next(0, 5)}}}""";
+                // Invariant culture: a decimal-comma locale would otherwise emit invalid JSON.
+                var p95 = Math.Round(avg * 1.8, 1).ToString(CultureInfo.InvariantCulture);
+                var detail = $$"""{"service":"{{service}}","region":"westeurope","p95":{{p95}},"errors":{{rng.Next(0, 5)}}}""";
                 rows.Add([ts, service, (long)count, avg, detail]);
             }
         }

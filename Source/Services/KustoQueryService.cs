@@ -1,3 +1,4 @@
+using System.IO;
 using Azure.Core;
 using Azure.Identity;
 using Azure.Monitor.Query;
@@ -8,12 +9,19 @@ namespace TraceTiger.Services;
 /// <summary>
 /// Runs KQL against Azure via <see cref="LogsQueryClient"/>. One client per Entra tenant, built on
 /// an <see cref="InteractiveBrowserCredential"/> with a DPAPI-persisted token cache — constructing
-/// the credential does NOT sign in; the first token request opens the browser, after which the
-/// cached token survives restarts.
+/// the credential does NOT sign in; the first run opens the browser. The resulting
+/// <see cref="AuthenticationRecord"/> (account id only, no secrets) is saved next to the settings
+/// so later launches can find the cached token silently instead of prompting again.
 /// </summary>
 public sealed class KustoQueryService
 {
-    private readonly Dictionary<string, LogsQueryClient> _clients = new();
+    // Azure Monitor Logs scope; the sign-in for it also yields the refresh token the client reuses.
+    private static readonly string[] SignInScopes = ["https://api.loganalytics.io/.default"];
+
+    // Without this a truncated/partially failed query throws and the rows Azure did return are lost.
+    private static readonly LogsQueryOptions QueryOptions = new() { AllowPartialErrors = true };
+
+    private readonly Dictionary<string, TenantSession> _sessions = new();
     private readonly DemoQuerySource _demo = new();
 
     /// <summary>Executes resolved KQL against the connection's target. Routing:
@@ -25,19 +33,21 @@ public sealed class KustoQueryService
         if (connection.Kind == ConnectionKind.Demo)
             return (await _demo.RunAsync(kql, ct), null);
 
-        var client = ClientFor(connection);
+        var session = SessionFor(connection);
+        await EnsureSignedInAsync(session, ct).ConfigureAwait(false);
+        var client = session.Client;
 
         if (connection.Kind == ConnectionKind.LogAnalyticsWorkspace
             && Guid.TryParse(connection.WorkspaceId.Trim(), out var workspaceGuid))
         {
             var resp = await client.QueryWorkspaceAsync(workspaceGuid.ToString(), kql, timeRange,
-                cancellationToken: ct).ConfigureAwait(false);
+                QueryOptions, ct).ConfigureAwait(false);
             return (MapTable(resp.Value.Table), PartialErrorOf(resp.Value));
         }
 
         var resourceId = RequireResourceId(connection);
         var resource = await client.QueryResourceAsync(resourceId, kql, timeRange,
-            cancellationToken: ct).ConfigureAwait(false);
+            QueryOptions, ct).ConfigureAwait(false);
         return (MapTable(resource.Value.Table), PartialErrorOf(resource.Value));
     }
 
@@ -45,17 +55,95 @@ public sealed class KustoQueryService
     public Task TestConnectionAsync(Connection connection, CancellationToken ct = default) =>
         RunAsync(connection, "print ok = 1", QueryTimeRange.All, ct);
 
-    private LogsQueryClient ClientFor(Connection connection)
+    private TenantSession SessionFor(Connection connection)
     {
         var key = string.IsNullOrWhiteSpace(connection.TenantId) ? "" : connection.TenantId.Trim();
-        if (_clients.TryGetValue(key, out var client)) return client;
-
-        var credential = new InteractiveBrowserCredential(new InteractiveBrowserCredentialOptions
+        lock (_sessions)
         {
-            TenantId = key.Length == 0 ? null : key,
-            TokenCachePersistenceOptions = new TokenCachePersistenceOptions { Name = "TraceTiger" },
-        });
-        return _clients[key] = new LogsQueryClient(credential);
+            if (_sessions.TryGetValue(key, out var session)) return session;
+
+            var recordPath = AuthRecordPathFor(key);
+            var record = LoadAuthRecord(recordPath);
+            var credential = new InteractiveBrowserCredential(new InteractiveBrowserCredentialOptions
+            {
+                TenantId = key.Length == 0 ? null : key,
+                TokenCachePersistenceOptions = new TokenCachePersistenceOptions { Name = "TraceTiger" },
+                AuthenticationRecord = record,
+            });
+            return _sessions[key] = new TenantSession(credential, new LogsQueryClient(credential), recordPath)
+            {
+                HasRecord = record is not null,
+            };
+        }
+    }
+
+    /// <summary>First use of a tenant with no saved record: sign in explicitly so the record can be
+    /// captured and persisted. Serialized per tenant so two tabs don't open two browser prompts.</summary>
+    private static async Task EnsureSignedInAsync(TenantSession session, CancellationToken ct)
+    {
+        if (session.HasRecord) return;
+
+        await session.SignInGate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (session.HasRecord) return;
+            var record = await session.Credential
+                .AuthenticateAsync(new TokenRequestContext(SignInScopes), ct).ConfigureAwait(false);
+            session.HasRecord = true;
+            SaveAuthRecord(session.RecordPath, record);
+        }
+        finally
+        {
+            session.SignInGate.Release();
+        }
+    }
+
+    private static string AuthRecordPathFor(string tenantKey)
+    {
+        var name = tenantKey.Length == 0 ? "default" : tenantKey.ToLowerInvariant();
+        foreach (var c in Path.GetInvalidFileNameChars())
+            name = name.Replace(c, '_');
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "TraceTiger", $"auth-{name}.json");
+    }
+
+    private static AuthenticationRecord? LoadAuthRecord(string path)
+    {
+        try
+        {
+            if (!File.Exists(path)) return null;
+            using var stream = File.OpenRead(path);
+            return AuthenticationRecord.Deserialize(stream);
+        }
+        catch
+        {
+            return null; // unreadable record → just sign in again
+        }
+    }
+
+    private static void SaveAuthRecord(string path, AuthenticationRecord record)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            using var stream = File.Create(path);
+            record.Serialize(stream);
+        }
+        catch
+        {
+            // Best-effort: failing to save only means another prompt next launch.
+        }
+    }
+
+    private sealed class TenantSession(
+        InteractiveBrowserCredential credential, LogsQueryClient client, string recordPath)
+    {
+        public InteractiveBrowserCredential Credential { get; } = credential;
+        public LogsQueryClient Client { get; } = client;
+        public string RecordPath { get; } = recordPath;
+        public SemaphoreSlim SignInGate { get; } = new(1, 1);
+        public volatile bool HasRecord;
     }
 
     private static ResourceIdentifier RequireResourceId(Connection connection)

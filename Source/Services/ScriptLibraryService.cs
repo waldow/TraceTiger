@@ -15,14 +15,17 @@ public sealed class ScriptTreeNode
 
 /// <summary>
 /// Scans the scripts folder for .kql files (recursive), exposes them as a tree, and watches for
-/// external changes with a debounce. Saves made by the app itself are suppressed so a Ctrl+S
-/// doesn't trigger a rescan echo.
+/// external changes (files and folders) with a debounce. Writes made by the app itself are
+/// suppressed for a short window so a Ctrl+S doesn't trigger a rescan echo.
 /// </summary>
 public sealed class ScriptLibraryService : IDisposable
 {
     private FileSystemWatcher? _watcher;
     private System.Timers.Timer? _debounce;
-    private readonly HashSet<string> _selfWrites = new(StringComparer.OrdinalIgnoreCase);
+    // Path → time until which watcher events for it are the app's own echo. Time-boxed so an entry
+    // whose event never arrives can't swallow a real external change later.
+    private static readonly TimeSpan SelfWriteWindow = TimeSpan.FromSeconds(2);
+    private readonly Dictionary<string, DateTime> _selfWrites = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
 
     /// <summary>Raised (on a worker thread) after external changes settle; UI should rescan.</summary>
@@ -40,15 +43,20 @@ public sealed class ScriptLibraryService : IDisposable
 
         try
         {
-            _watcher = new FileSystemWatcher(folder, "*.kql")
+            // No "*.kql" filter: it would also filter out folder create/rename/delete events.
+            // Relevance is decided per event in OnFsEvent instead.
+            _watcher = new FileSystemWatcher(folder)
             {
                 IncludeSubdirectories = true,
                 NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.LastWrite,
+                InternalBufferSize = 64 * 1024,
             };
             _watcher.Created += OnFsEvent;
             _watcher.Deleted += OnFsEvent;
             _watcher.Changed += OnFsEvent;
             _watcher.Renamed += OnFsEvent;
+            // Buffer overflow (huge checkout) loses individual events — rescan to catch up.
+            _watcher.Error += (_, _) => ScheduleLibraryChanged();
             _watcher.EnableRaisingEvents = true;
         }
         catch (Exception)
@@ -97,7 +105,7 @@ public sealed class ScriptLibraryService : IDisposable
 
     public async Task SaveScriptAsync(string path, string text)
     {
-        lock (_gate) _selfWrites.Add(path);
+        NoteSelfWrite(path);
         await AtomicFile.WriteAllTextAsync(path, text).ConfigureAwait(false);
     }
 
@@ -106,7 +114,7 @@ public sealed class ScriptLibraryService : IDisposable
         var fileName = ScriptFileNameFrom(name);
         var path = Path.Combine(folder, fileName);
         if (File.Exists(path)) throw new InvalidOperationException($"\"{fileName}\" already exists here.");
-        lock (_gate) _selfWrites.Add(path);
+        NoteSelfWrite(path);
         AtomicFile.WriteAllText(path, ScriptMetadataParser.NewScriptTemplate(
             Path.GetFileNameWithoutExtension(fileName)));
         return path;
@@ -124,19 +132,21 @@ public sealed class ScriptLibraryService : IDisposable
     {
         var fileName = ScriptFileNameFrom(newName);
         var newPath = Path.Combine(Path.GetDirectoryName(path)!, fileName);
-        if (File.Exists(newPath)) throw new InvalidOperationException($"\"{fileName}\" already exists here.");
-        lock (_gate)
-        {
-            _selfWrites.Add(path);
-            _selfWrites.Add(newPath);
-        }
+        if (string.Equals(path, newPath, StringComparison.Ordinal)) return path;
+
+        // On case-insensitive file systems a case-only rename "exists" already — as itself.
+        var caseOnlyRename = string.Equals(path, newPath, StringComparison.OrdinalIgnoreCase);
+        if (!caseOnlyRename && File.Exists(newPath))
+            throw new InvalidOperationException($"\"{fileName}\" already exists here.");
+
+        NoteSelfWrite(path, newPath);
         File.Move(path, newPath);
         return newPath;
     }
 
     public void DeleteScript(string path)
     {
-        lock (_gate) _selfWrites.Add(path);
+        NoteSelfWrite(path);
         File.Delete(path);
     }
 
@@ -174,15 +184,65 @@ public sealed class ScriptLibraryService : IDisposable
         return trimmed;
     }
 
-    private void OnFsEvent(object sender, FileSystemEventArgs e)
+    private void NoteSelfWrite(params string[] paths)
+    {
+        var now = DateTime.UtcNow;
+        lock (_gate)
+        {
+            foreach (var stale in _selfWrites.Where(p => p.Value < now).Select(p => p.Key).ToList())
+                _selfWrites.Remove(stale);
+            foreach (var path in paths)
+                _selfWrites[path] = now + SelfWriteWindow;
+        }
+    }
+
+    private bool IsSelfWrite(string path)
     {
         lock (_gate)
         {
-            // Swallow one echo per app-side write (save/create/rename/delete).
-            if (_selfWrites.Remove(e.FullPath)) return;
-            if (e is RenamedEventArgs r && _selfWrites.Remove(r.OldFullPath)) return;
+            if (!_selfWrites.TryGetValue(path, out var until)) return false;
+            if (until >= DateTime.UtcNow) return true;
+            _selfWrites.Remove(path);
+            return false;
         }
+    }
 
+    private void OnFsEvent(object sender, FileSystemEventArgs e)
+    {
+        var oldPath = (e as RenamedEventArgs)?.OldFullPath;
+
+        var relevant = IsRelevant(e.FullPath, e.ChangeType)
+            || (oldPath is not null && IsRelevant(oldPath, WatcherChangeTypes.Deleted));
+        if (!relevant) return;
+
+        // Swallow echoes of app-side writes (save/create/rename/delete).
+        if (IsSelfWrite(e.FullPath) || (oldPath is not null && IsSelfWrite(oldPath))) return;
+
+        ScheduleLibraryChanged();
+    }
+
+    /// <summary>Does this event affect what the tree shows? .kql files always; folders on
+    /// create/rename/delete. Dot-directories (.git, …) are not in the tree, so they're ignored.</summary>
+    private bool IsRelevant(string fullPath, WatcherChangeTypes change)
+    {
+        var relative = Path.GetRelativePath(Folder, fullPath);
+        foreach (var segment in relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+            if (segment.Length > 1 && segment.StartsWith('.') && segment != "..") return false;
+
+        if (fullPath.EndsWith(".kql", StringComparison.OrdinalIgnoreCase)) return true;
+
+        // A folder's LastWrite changes whenever anything inside it does — not interesting by itself.
+        if (change == WatcherChangeTypes.Changed) return false;
+
+        // Something that is gone can't be probed; the only cheap tell for "was a folder" is that it
+        // doesn't look like a file. A spurious rescan is harmless.
+        if (change == WatcherChangeTypes.Deleted) return !Path.HasExtension(fullPath);
+
+        return Directory.Exists(fullPath);
+    }
+
+    private void ScheduleLibraryChanged()
+    {
         // Debounce bursts (editors write temp + rename; git checkouts touch many files).
         lock (_gate)
         {

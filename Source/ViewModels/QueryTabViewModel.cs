@@ -22,7 +22,6 @@ public partial class QueryTabViewModel : ObservableObject
     private int _runGeneration;
     private System.Timers.Timer? _paramDebounce;
     private QueryResultTable? _lastTable;
-    private string? _lastResolvedKql;
     private bool _jsonStale = true;
     private bool _loadingText;
 
@@ -204,8 +203,11 @@ public partial class QueryTabViewModel : ObservableObject
         ErrorText = null;
         WarningText = null;
 
+        // Snapshot the script: the editor stays live during the run, and history / the render
+        // directive must describe what was actually sent.
+        var scriptText = Text;
         var values = Parameters.ToDictionary(p => p.Token, p => (string?)p.Value);
-        var kql = QueryParameterResolver.Resolve(Text, values);
+        var kql = QueryParameterResolver.Resolve(scriptText, values);
         var unresolved = QueryParameterResolver.FindUnresolvedTokens(kql);
         if (unresolved.Count > 0)
         {
@@ -240,7 +242,6 @@ public partial class QueryTabViewModel : ObservableObject
         IsRunning = true;
         StatusText = $"Running on {connection.Name}…";
         var stopwatch = Stopwatch.StartNew();
-        _lastResolvedKql = kql;
 
         try
         {
@@ -248,8 +249,8 @@ public partial class QueryTabViewModel : ObservableObject
             stopwatch.Stop();
             if (gen != _runGeneration) return; // stale run — a newer one owns the UI
 
-            PresentResult(table, connection, stopwatch.Elapsed, partialError);
-            AddHistory(connection, stopwatch.Elapsed, table.RowCount, null);
+            PresentResult(table, connection, stopwatch.Elapsed, partialError, scriptText);
+            AddHistory(connection, stopwatch.Elapsed, table.RowCount, null, scriptText, kql);
         }
         catch (OperationCanceledException)
         {
@@ -263,7 +264,7 @@ public partial class QueryTabViewModel : ObservableObject
             var message = FirstLine(ex.Message);
             ErrorText = message;
             StatusText = null;
-            AddHistory(connection, stopwatch.Elapsed, 0, message);
+            AddHistory(connection, stopwatch.Elapsed, 0, message, scriptText, kql);
         }
         finally
         {
@@ -271,14 +272,15 @@ public partial class QueryTabViewModel : ObservableObject
         }
     }
 
-    private void PresentResult(QueryResultTable table, Connection connection, TimeSpan elapsed, string? partialError)
+    private void PresentResult(QueryResultTable table, Connection connection, TimeSpan elapsed,
+        string? partialError, string scriptText)
     {
         _lastTable = table;
         _jsonStale = true;
 
         ResultsView = DataTableBuilder.Build(table);
 
-        var renderKind = DetectRenderDirective(Text);
+        var renderKind = DetectRenderDirective(scriptText);
         if (renderKind is not null) ChartKind = renderKind.Value;
         Chart = ChartProjector.Project(table, ChartKind);
 
@@ -301,7 +303,8 @@ public partial class QueryTabViewModel : ObservableObject
         _jsonStale = false;
     }
 
-    private void AddHistory(Connection connection, TimeSpan elapsed, int rowCount, string? error)
+    private void AddHistory(Connection connection, TimeSpan elapsed, int rowCount, string? error,
+        string scriptText, string resolvedKql)
     {
         App.History.Add(new RunHistoryEntry
         {
@@ -313,8 +316,8 @@ public partial class QueryTabViewModel : ObservableObject
             DurationMs = elapsed.TotalMilliseconds,
             RowCount = rowCount,
             ErrorMessage = error,
-            KqlText = Text,
-            ResolvedKql = _lastResolvedKql ?? "",
+            KqlText = scriptText,
+            ResolvedKql = resolvedKql,
         });
     }
 
@@ -410,8 +413,9 @@ public partial class QueryTabViewModel : ObservableObject
     [RelayCommand]
     private void CopyKql()
     {
-        var kql = _lastResolvedKql
-            ?? QueryParameterResolver.Resolve(Text, Parameters.ToDictionary(p => p.Token, p => (string?)p.Value));
+        // Always what the editor and parameter strip show now — not the previous run's query.
+        var kql = QueryParameterResolver.Resolve(Text,
+            Parameters.ToDictionary(p => p.Token, p => (string?)p.Value));
         Clipboard.SetText(kql);
         StatusText = "Copied resolved KQL";
     }

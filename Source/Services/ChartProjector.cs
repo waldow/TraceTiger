@@ -28,7 +28,8 @@ public sealed class ChartModel
 /// Projects a <see cref="QueryResultTable"/> into LiveCharts series. Typical KQL chart results are
 /// <c>summarize &lt;value&gt; by &lt;category?&gt;, bin(timestamp,…)</c> shapes, so the rule is:
 /// a datetime column is the X axis; string columns split into one series each; numeric columns
-/// supply the Y values. When no datetime is present it falls back to a single categorical chart.
+/// supply the Y values. Near-unique string columns (message, customDimensions, …) are detail, not
+/// dimensions, and are ignored. When no datetime is present it falls back to a single categorical chart.
 /// Returns <c>Ok=false</c> if it can't make sense of the shape (the pane then shows a hint instead).
 /// </summary>
 public static class ChartProjector
@@ -60,7 +61,8 @@ public static class ChartProjector
         var numericCols = AllIndexes(table, table.IsNumeric);
         if (numericCols.Count == 0) return new ChartModel { Ok = false };
 
-        var catCols = AllIndexes(table, i => i != dateCol && !table.IsNumeric(i) && !table.IsDateTime(i));
+        var catCols = AllIndexes(table, i => i != dateCol && !table.IsNumeric(i) && !table.IsDateTime(i)
+            && !IsDetailColumn(table, i));
 
         // Shared, sorted X axis of distinct timestamps.
         var keys = table.Rows
@@ -134,7 +136,7 @@ public static class ChartProjector
             Ok = true,
             Series = series.ToArray(),
             XAxes = new[] { MakeXAxis(labels) },
-            YAxes = new[] { MakeYAxis() },
+            YAxes = new[] { MakeYAxis(HasNegative(table, numericCols)) },
             DrawMarginFrame = MakeDrawMarginFrame(),
         };
     }
@@ -160,7 +162,7 @@ public static class ChartProjector
             Ok = true,
             Series = series,
             XAxes = new[] { MakeXAxis(labels.ToArray()) },
-            YAxes = new[] { MakeYAxis() },
+            YAxes = new[] { MakeYAxis(HasNegative(table, [valueCol])) },
             DrawMarginFrame = MakeDrawMarginFrame(),
         };
     }
@@ -199,14 +201,31 @@ public static class ChartProjector
         SeparatorsPaint = Paint(GridColor),
     };
 
-    private static Axis MakeYAxis() => new()
+    /// <summary>Anchors the axis at zero for the usual counts/durations, but lets it auto-range
+    /// when the data goes negative so those points aren't clipped.</summary>
+    private static Axis MakeYAxis(bool hasNegative) => new()
     {
         TextSize = 11,
         LabelsPaint = Paint(AxisColor),
         NamePaint = Paint(AxisColor),
         SeparatorsPaint = Paint(GridColor),
-        MinLimit = 0,
+        MinLimit = hasNegative ? null : 0,
     };
+
+    private static bool HasNegative(QueryResultTable table, IReadOnlyList<int> valueCols) =>
+        table.Rows.Any(r => valueCols.Any(c => AsDouble(r, c) < 0));
+
+    /// <summary>A text column whose values are (nearly) unique per row can't be a series dimension —
+    /// splitting on it yields one single-point series per row. Small results are left alone so a
+    /// sparse but legitimate breakdown still splits.</summary>
+    private static bool IsDetailColumn(QueryResultTable table, int col)
+    {
+        const int MaxSmallCardinality = 12;
+        var distinct = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var r in table.Rows)
+            distinct.Add(CellText(r, col));
+        return distinct.Count > MaxSmallCardinality && distinct.Count * 2 > table.RowCount;
+    }
 
     private static SolidColorPaint Paint(SKColor color, float strokeThickness = 1) =>
         new(color) { StrokeThickness = strokeThickness };

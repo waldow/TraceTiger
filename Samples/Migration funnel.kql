@@ -1,7 +1,5 @@
 // @name Migration funnel
-// @description
-// OLD/BAAS. Distinct users at each lifecycle stage (last 30d). Matches TyroMigrationLogic log lines.
-let win = 30d;
+// @description OLD/BAAS. Distinct users at each lifecycle stage within the fixed window below. Matches TyroMigrationLogic log lines.
 traces
 | where timestamp between (datetime(2026-06-20T14:00:00.0000000Z) .. datetime(2026-07-01T13:59:00.0000000Z))
 | extend appUser = tostring(customDimensions.AppUserId)

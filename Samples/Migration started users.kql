@@ -1,9 +1,9 @@
 // @name Migration started users
-// @description
+// @description Users who started a migration in the fixed window below, with first start time and number of start events.
 traces
 | where timestamp between (datetime(2026-06-20T14:00:00.0000000Z) .. datetime(2026-07-01T13:59:00.0000000Z))
-| where message startswith "Migration completed for user"
+| where message startswith "Beginning migration for user"
 | extend appUserId = tostring(customDimensions["AppUserId"])
 | where isnotempty(appUserId)
-| summarize completed = min(timestamp), startEvents = count() by appUserId
-| order by completed asc
+| summarize started = min(timestamp), startEvents = count() by appUserId
+| order by started asc
